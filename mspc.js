@@ -33,8 +33,8 @@ const runAccountInfo = require('./account-info.js');
 
 const scripts = [
 
-  { name: 'Burn Energy', fn: runBurnEnergy, alwaysRun: true },
-  { name: 'Claim Duel Rewards', fn: runClaimRewards, alwaysRun: true },
+  /*{ name: 'Burn Energy', fn: runBurnEnergy, alwaysRun: true },
+  { name: 'Claim Duel Rewards', fn: runClaimRewards, alwaysRun: true },*/
 
   /*{ name: 'Fashion Magazine', fn: runFashionMagazine, envKey: 'LP_FASHION_MAGAZINE_URL' },
 
@@ -50,25 +50,25 @@ const scripts = [
 
   { name: 'Memory Event', fn: runMemoryEvent, envKey: 'LP_MEMORY_URL' }, */
 
-  { name: 'Daily Tasks', fn: runDailyTasks, alwaysRun: true },
+  /*{ name: 'Daily Tasks', fn: runDailyTasks, alwaysRun: true },
 
   { name: 'Boyfriend Kiss', fn: runBoyfriendKiss, alwaysRun: true },
   { name: 'Guild Attack', fn: runGuildAttack, alwaysRun: true },
 
-  { name: 'Guild Show', fn: runGuildShow, alwaysRun: true },
+  { name: 'Guild Show', fn: runGuildShow, alwaysRun: true },*/
 
   //{ name: 'Pet Training', fn: runPetTraining, alwaysRun: false },
 
   //{ name: 'Bridesmaids Tasks', fn: runBridesmaids, alwaysRun: false },
 
-  { name: 'Apartment Income', fn: runApartment, alwaysRun: true },
+  //{ name: 'Apartment Income', fn: runApartment, alwaysRun: true },
   //{ name: 'Gifts Flashback', fn: runGifts, alwaysRun: false },
   { name: 'Teleport Activation', fn: runTeleport, alwaysRun: true },
-  { name: 'Furniture Script', fn: runFurnitureScript, alwaysRun: false },
-  { name: 'Raise stats', fn: runDuelFP, alwaysRun: true }, //raises stats if +200
+  /*{ name: 'Furniture Script', fn: runFurnitureScript, alwaysRun: false },
+  { name: 'Raise stats', fn: runDuelFP, alwaysRun: true }, //raises stats if +200 */
   //{ name: 'Battle Pass Chests', fn: runBattlePassChests, alwaysRun: false }, //opens chests
   //{ name: 'New Account', fn: runNewAccount, alwaysRun: false },
-  { name: 'Account Info', fn: runAccountInfo, alwaysRun: true },
+  /*{ name: 'Account Info', fn: runAccountInfo, alwaysRun: true }, */
 
 ];
 
