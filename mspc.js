@@ -30,9 +30,11 @@ const runGuildAttack = require('./guild-attack.js');
 const runBattlePassChests = require('./battlepass-chests.js');
 const runNewAccount = require('./new-account.js');
 const runAccountInfo = require('./account-info.js');
+const runMemoryLive = require('./memory-live.js');
 
 const scripts = [
 
+  { name: 'Memory Live', fn: runMemoryLive, alwaysRun: true },
   /*{ name: 'Burn Energy', fn: runBurnEnergy, alwaysRun: true },
   { name: 'Claim Duel Rewards', fn: runClaimRewards, alwaysRun: true },*/
 
