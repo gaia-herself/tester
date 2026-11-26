@@ -2,13 +2,14 @@
 // 🃏 MEMORY LIVE EVENT: fully independent script
 // Find live memory event → use up free flips → free Start → play with Phase 1 and 2
 // Every flip is a request (no clicks). Tile positions in the logs count from 1.
+// Placeholder (decoration) tiles are read from the page and are NEVER flipped.
 // ================================================================
 
 const BASE = 'https://v3.g.ladypopular.com';
 const GRAPHQL_URL = `${BASE}/api/graphql/index.php`;
 
 // ---------------------------- SETTINGS ----------------------------
-const BANNER_IS_FLASHBACK = '1';    // '' = live event | '1' = flashback event (use '1' ONLY for testing)
+const BANNER_IS_FLASHBACK = '1';   // '' = live event | '1' = flashback event (use '1' ONLY for testing)
 const MIN_EMERALDS = 15;           // needs MORE than this to start playing and for every paid flip
 const WAIT_LIMIT_SECONDS = 300;    // wait for the free Start only when it is this close (5 minutes)
 const AFTER_START_WAIT_MS = 3000;  // time for the board to finish shuffling after Start
@@ -131,10 +132,11 @@ module.exports = async function runMemoryLive(page) {
   const sleep = (ms) => page.waitForTimeout(ms);
 
   // ---------------------------- state ----------------------------
-  let eventId;
+  let eventId, memoryUrl;
   let zoneId, rows, cols, map, freeTries;
   let emeralds = 0, credits = 0;
-  let seen = {};   // tile index -> number it showed (this board only)
+  let seen = {};          // tile index -> number it showed (this board only)
+  let fake = new Set();   // placeholder (decoration) tiles of this board
 
   // ---------------------------- request helpers ----------------------------
   let cachedToken = null;
@@ -209,8 +211,7 @@ module.exports = async function runMemoryLive(page) {
         cols: num(z.board_width, 'board width'),
         freeTries: num(z.free_tries_left, 'free flips left'),
         map: z.map,
-        resetPrice: z.reset_price,
-        isCompleted: z.is_completed
+        resetPrice: z.reset_price
       } : null
     };
   }
@@ -223,16 +224,43 @@ module.exports = async function runMemoryLive(page) {
     }
     zoneId = zone.id; rows = zone.rows; cols = zone.cols; map = zone.map; freeTries = zone.freeTries;
     seen = {};
+    fake = new Set();
   }
 
   const total = () => rows * cols;
   const allIndexes = () => Array.from({ length: total() }, (_, i) => i);
+  const realIndexes = () => allIndexes().filter(i => !fake.has(i));   // the tiles that really exist
   const cellAt = (i) => map[Math.floor(i / cols)][i % cols];
   const isOpened = (i) => cellAt(i).is_opened === true;
   const describe = (i) => `row ${Math.floor(i / cols) + 1} col ${(i % cols) + 1}`;
+  const boardText = () => allIndexes().map(i => {
+    if (fake.has(i)) return '##';
+    const v = cellAt(i).value;
+    return (v === null || v === undefined) ? '__' : v;
+  }).reduce((acc, t, i) => acc + (i % cols === 0 ? (i === 0 ? '' : ' | ') : ' ') + t, '');
+
+  // Placeholder tiles are marked on the page from the very start (class memory-grid-item-fake),
+  // exactly like your old script used. The page lists tiles in reading order: top left, row by row.
+  // If the page cannot be matched to the board, the run STOPS before any flip.
+  async function markFakeFromPage() {
+    try {
+      await page.waitForSelector('.memory-grid-item', { timeout: 30000 });
+    } catch (e) {
+      throw new Error('The tiles did not show on the page, so the placeholder tiles cannot be found. Nothing was flipped.');
+    }
+    const flags = await page.$$eval('.memory-grid-item', els => els.map(el => el.classList.contains('memory-grid-item-fake')));
+    if (flags.length !== total()) {
+      throw new Error(`The page shows ${flags.length} tiles but the board is ${rows} x ${cols} (${total()}). Cannot match the placeholders, so nothing was flipped.`);
+    }
+    fake = new Set();
+    flags.forEach((isFake, i) => { if (isFake) fake.add(i); });
+    if (fake.size > 0) log(`🪧 Placeholder tile(s), never flipped: ${[...fake].map(describe).join(', ')}`);
+    else log('ℹ️ No placeholder tiles on this board.');
+  }
 
   // ONE flip (one request). Positions: X = row, Y = column, counted from 0.
   async function flip(i) {
+    if (fake.has(i)) throw new Error(`Refusing to flip ${describe(i)}: it is a placeholder tile.`);
     if (freeTries <= 0 && !(emeralds > MIN_EMERALDS)) {
       throw new GracefulStop(`emeralds (${emeralds}) are not above ${MIN_EMERALDS}, so no paid flip is made.`);
     }
@@ -274,7 +302,7 @@ module.exports = async function runMemoryLive(page) {
     log(`🎲 Using up the free flips at random (${freeTries} left)...`);
     let guard = total() * 4;   // safety against an endless loop
     while (guard-- > 0) {
-      const unopened = allIndexes().filter(i => !isOpened(i));
+      const unopened = realIndexes().filter(i => !isOpened(i));
       if (unopened.length === 0) { log('ℹ️ No hidden tiles left on this board.'); break; }
 
       const hasPending = unopened.some(i => cellAt(i).pending === true);
@@ -325,26 +353,29 @@ module.exports = async function runMemoryLive(page) {
     if (afterCredits < pre.credits) throw new Error(`Start used diamonds (${pre.credits} -> ${afterCredits}). Stopping.`);
     emeralds = num(m.lady_stats.emeralds, 'emeralds');
     credits = afterCredits;
-    log(`✅ New board started (zone ${m.active_zone_id}). Waiting ${AFTER_START_WAIT_MS / 1000}s for the shuffle...`);
+    log(`✅ New board started (zone ${m.active_zone_id}). Waiting ${AFTER_START_WAIT_MS / 1000}s for the shuffle, then reloading the page...`);
 
     await sleep(AFTER_START_WAIT_MS);
+    await page.goto(memoryUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
     const s2 = await readState();
     if (!s2.zone) throw new Error('No zone data after Start.');
     if (Number(m.active_zone_id) !== s2.zone.id) log(`⚠️ Start said zone ${m.active_zone_id}, the game now reports zone ${s2.zone.id}. Using ${s2.zone.id}.`);
     setBoardFrom(s2.zone);
+    await markFakeFromPage();
 
-    const dirty = allIndexes().some(i => cellAt(i).is_opened === true || cellAt(i).pending === true);
+    const dirty = realIndexes().some(i => cellAt(i).is_opened === true || cellAt(i).pending === true);
     if (dirty) throw new Error('The new board already has opened tiles. Stopping.');
 
-    log(`🗺️ New board: ${rows} x ${cols}, free flips ${freeTries}, emeralds ${emeralds}`);
+    log(`🗺️ New board: ${rows} x ${cols}, ${realIndexes().length} real tiles, free flips ${freeTries}, emeralds ${emeralds} | tiles: ${boardText()}`);
     return true;
   }
 
   // ---------------------------- STEP: play the board (your Phase 1 and Phase 2) ----------------------------
+  // Placeholders are not on this board at all: only real tiles are listed, in reading order.
   async function playBoard() {
-    const N = total();
-    const allIdx = allIndexes();
+    const allIdx = realIndexes();
+    const N = allIdx.length;
     const clickedOnce = new Set();
     const matched = new Set();
     const known = {};
@@ -395,8 +426,9 @@ module.exports = async function runMemoryLive(page) {
     }
 
     const opened = allIdx.filter(isOpened).length;
-    if (opened === N) log(`🎉 Board finished: all ${N} tiles are matched.`);
-    else log(`⚠️ Board not finished: ${opened}/${N} tiles are matched.`);
+    const note = fake.size > 0 ? ` (${fake.size} placeholder tile skipped)` : '';
+    if (opened === N) log(`🎉 Board finished: all ${N} real tiles are matched${note}.`);
+    else log(`⚠️ Board not finished: ${opened}/${N} real tiles are matched${note}.`);
   }
 
   // ---------------------------- MAIN ----------------------------
@@ -418,7 +450,8 @@ module.exports = async function runMemoryLive(page) {
     if (!Number.isFinite(eventId)) throw new Error('Memory banner found, but its event id could not be read.');
     log(`📌 [Memory Live] ${kind} memory event: ${title} (ID ${eventId})`);
 
-    await page.goto(`${BASE}/events/memory.php?event_id=${eventId}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    memoryUrl = `${BASE}/events/memory.php?event_id=${eventId}`;
+    await page.goto(memoryUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
     // 2) emerald check
     const stats = await getStats();
@@ -430,19 +463,21 @@ module.exports = async function runMemoryLive(page) {
       return;
     }
 
-    // 3) read the current board
+    // 3) read the current board and find its placeholder tiles BEFORE any flip
     const state = await readState();
     if (!state.zone) {
       log(`⚠️ No zone data for this event (has_played_event=${state.info.has_played_event}). Nothing was done. Please send me this log.`);
       return;
     }
     setBoardFrom(state.zone);
-    const openedNow = allIndexes().filter(isOpened).length;
-    log(`🗺️ Current board: ${state.zone.name} (zone ${zoneId}), ${rows} x ${cols}, ${openedNow}/${total()} opened, ` +
+    await markFakeFromPage();
+    const real = realIndexes();
+    const openedNow = real.filter(isOpened).length;
+    log(`🗺️ Current board: ${state.zone.name} (zone ${zoneId}), ${rows} x ${cols}, ${openedNow}/${real.length} real tiles opened, ` +
         `free flips ${freeTries}, reset allowed=${state.allowed}, cooldown ${state.cooldown}s`);
 
     // 4) an unfinished board is not finished: its free flips are used up at random
-    if (openedNow < total()) await useUpFreeFlips();
+    if (openedNow < real.length) await useUpFreeFlips();
     else log('ℹ️ The current board is already finished.');
 
     // 5) free Start (waits when it is 5 minutes away or less)
