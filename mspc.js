@@ -35,6 +35,7 @@ const runMemoryLive = require('./memory-live.js');
 const scripts = [
 
   { name: 'Memory Live', fn: runMemoryLive, alwaysRun: true },
+  { name: 'Teleport Activation', fn: runTeleport, alwaysRun: true },
   /*{ name: 'Burn Energy', fn: runBurnEnergy, alwaysRun: true },
   { name: 'Claim Duel Rewards', fn: runClaimRewards, alwaysRun: true },*/
 
@@ -65,7 +66,6 @@ const scripts = [
 
   //{ name: 'Apartment Income', fn: runApartment, alwaysRun: true },
   //{ name: 'Gifts Flashback', fn: runGifts, alwaysRun: false },
-  //{ name: 'Teleport Activation', fn: runTeleport, alwaysRun: true },
   /*{ name: 'Furniture Script', fn: runFurnitureScript, alwaysRun: false },
   { name: 'Raise stats', fn: runDuelFP, alwaysRun: true }, //raises stats if +200 */
   //{ name: 'Battle Pass Chests', fn: runBattlePassChests, alwaysRun: false }, //opens chests
