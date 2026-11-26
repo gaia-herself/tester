@@ -9,7 +9,7 @@ const BASE = 'https://v3.g.ladypopular.com';
 const GRAPHQL_URL = `${BASE}/api/graphql/index.php`;
 
 // ---------------------------- SETTINGS ----------------------------
-const BANNER_IS_FLASHBACK = '1';   // '' = live event | '1' = flashback event (use '1' ONLY for testing)
+const BANNER_IS_FLASHBACK = '';   // '' = live event | '1' = flashback event (use '1' ONLY for testing)
 const MIN_EMERALDS = 15;           // needs MORE than this to start playing and for every paid flip
 const WAIT_LIMIT_SECONDS = 300;    // wait for the free Start only when it is this close (5 minutes)
 const AFTER_START_WAIT_MS = 3000;  // time for the board to finish shuffling after Start
