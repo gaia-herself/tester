@@ -36,8 +36,9 @@ const runMemoryActivation = require('./memory-activation.js');
 const scripts = [
 
   //{ name: 'Memory Live', fn: runMemoryLive, alwaysRun: true },
-  { name: 'Teleport Activation', fn: runTeleport, alwaysRun: true },
+  
   { name: 'Memory Flashback', fn: runMemoryActivation, alwaysRun: true },
+  { name: 'Teleport Activation', fn: runTeleport, alwaysRun: true },
   /*{ name: 'Burn Energy', fn: runBurnEnergy, alwaysRun: true },
   { name: 'Claim Duel Rewards', fn: runClaimRewards, alwaysRun: true },*/
 
