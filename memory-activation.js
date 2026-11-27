@@ -20,6 +20,22 @@ const REQUEST_TIMEOUT_MS = 60000;  // wait this long for every reply, never retr
 
 class GracefulStop extends Error {}
 
+// 🆓 "Is this activation free?"
+// The game's is_free_activation flag does NOT mean "free to activate"
+// (it was false on every event while the free slot was open).
+// What the game really shows is activation_price:
+//   - empty ([])        → free right now (the flashback slot is open)
+//   - {"credits": 20}   → costs diamonds (the slot is taken)
+// Anything else (null, missing, a price above 0) is NOT treated as free.
+function isFreeActivation(e) {
+  const p = e.activation_price;
+  if (Array.isArray(p)) return p.length === 0;
+  if (p && typeof p === 'object') {
+    return ['credits', 'emeralds', 'dollars'].every(k => !(Number(p[k]) > 0));
+  }
+  return false;
+}
+
 // ---------------------------- REQUEST TEXTS ----------------------------
 const STATS_QUERY = `query getLadyGlobalData {
   main {
@@ -454,7 +470,8 @@ module.exports = async function runMemoryActivation(page) {
         const list = (j.search_events && j.search_events.list) || [];
         list.forEach(e => out.push({
           id: e.id, title: e.title, is_flashback: e.is_flashback,
-          can_be_activated: e.can_be_activated, is_free_activation: e.is_free_activation
+          can_be_activated: e.can_be_activated, is_free_activation: e.is_free_activation,
+          activation_price: e.activation_price, lock_type_info: e.lock_type_info
         }));
         if (!(j.search_events && j.search_events.has_more) || !list.length) break;
         offset = j.search_events.offset;
@@ -463,10 +480,14 @@ module.exports = async function runMemoryActivation(page) {
       return out;
     });
 
-    // only events that can be activated AND are a free activation
+    // only events that can be activated AND have no activation price (an empty price is how the game shows "free")
     const activatable = new Map();
+    let flashbackCount = 0, canActivateCount = 0, emptyPriceCount = 0;
     for (const e of all) {
-      if (e.is_flashback === true && e.can_be_activated === true && e.is_free_activation === true) {
+      if (e.is_flashback === true) flashbackCount++;
+      if (e.can_be_activated === true) canActivateCount++;
+      if (isFreeActivation(e)) emptyPriceCount++;
+      if (e.is_flashback === true && e.can_be_activated === true && isFreeActivation(e)) {
         activatable.set(Number(e.id), e.title);
       }
     }
@@ -476,11 +497,16 @@ module.exports = async function runMemoryActivation(page) {
       if (activatable.has(id)) candidates.push({ id, title: activatable.get(id), order: index + 1 });
     });
 
+    log(`🔎 Event flags: ${all.length} read | ${flashbackCount} flashbacks | ${canActivateCount} can_be_activated | ${emptyPriceCount} with no activation price`);
     log(`⭐ ${all.length} memory events read | ${activatable.size} free to activate | ${candidates.length} of them are on your list`);
     if (candidates.length === 0) {
       log('⏭️ None of the events on your list can be activated for free right now. Nothing to do.');
       return null;
     }
+
+    // 💎 diamond guard (before): if the diamonds cannot be read, nothing is activated
+    const diamondsBefore = (await getStats()).credits;
+    log(`💎 Diamonds before activation: ${diamondsBefore}`);
 
     for (const cand of candidates.slice(0, MAX_PRIORITY_ATTEMPTS)) {
       log(`🎯 Activating memory event: ${cand.title} (ID ${cand.id}) | number ${cand.order} in your list`);
@@ -496,6 +522,14 @@ module.exports = async function runMemoryActivation(page) {
 
       if (resp?.status === 1) {
         log(`✅ Memory flashback activated: ${cand.title}`);
+
+        // 💎 diamond guard (after)
+        const diamondsAfter = (await getStats()).credits;
+        if (diamondsAfter < diamondsBefore) {
+          throw new Error(`Diamonds went down during activation (${diamondsBefore} -> ${diamondsAfter}). Stopping.`);
+        }
+        log(`💎 Diamonds after activation: ${diamondsAfter} (no change)`);
+
         return cand;
       }
       log(`❌ Activation refused. Status=${resp?.status}. Trying the next one, if any.`);
